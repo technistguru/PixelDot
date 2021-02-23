@@ -8,18 +8,26 @@ public class BlockData : Node
     public Vector2 block_size = new Vector2(16, 16);
     public Vector2 chunk_size = new Vector2(16, 16);
     public Vector2 padding = new Vector2(1, 1);
-    public int layers;
+
+    List<BlockLayer> layer_nodes = new List<BlockLayer>();
 
     Dictionary<Vector2, int[,,]> chunks = new Dictionary<Vector2, int[,,]>();
-    Godot.Collections.Array layer_nodes = new Godot.Collections.Array();
 
     List<Vector2> oldRenderChunks = new List<Vector2>();
 
 
     public override void _Process(float delta)
     {
+        layer_nodes.Clear();
+        foreach (Node node in GetParent().GetChildren()){
+            string name = node.Name;
+            BlockLayer child = GetParent().GetNodeOrNull<BlockLayer>(name);
+            if (child != null){
+                layer_nodes.Add(child);
+            }
+        }
+
         List<Vector2> renderChunks = get_render_chunks();
-        layer_nodes = (Godot.Collections.Array)GetParent().Get("layer_nodes");
         Node generator = (Node)GetParent().Get("generator_node");
 
         foreach (Vector2 chunkPos in renderChunks){
@@ -36,32 +44,12 @@ public class BlockData : Node
         }
 
         foreach (Vector2 chunk in oldRenderChunks)
-        for (int z = 0; z < layers; z++){
+        for (int z = 0; z < layer_nodes.Count; z++){
             BlockLayer layer = (BlockLayer)layer_nodes[z];
             layer.clear_chunk(new Rect2( chunk*chunk_size, chunk_size) );
         }
 
         oldRenderChunks = renderChunks;
-    }
-
-
-    public void set_chunk_size(Vector2 value)
-    {
-        chunk_size = value;
-        reset();
-    }
-    public void set_block_size(Vector2 value)
-    {
-        block_size = value;
-    }
-    public void set_padding(Vector2 value)
-    {
-        padding = value;
-    }
-    public void set_layers(int value)
-    {
-        layers = value;
-        reset();
     }
 
 
@@ -75,7 +63,7 @@ public class BlockData : Node
 
         for (int x = 0; x < chunk_size.x; x++)
         for (int y = 0; y < chunk_size.y; y++){
-            for (int z = 0; z < layers; z++){
+            for (int z = 0; z < layer_nodes.Count; z++){
                 int i = x + posx;
                 int j = y + posy;
 
@@ -91,7 +79,7 @@ public class BlockData : Node
 
     public void update_chunk(Vector2 chunkPos)
     {
-        for (int z = 0; z < layers; z++){
+        for (int z = 0; z < layer_nodes.Count; z++){
             BlockLayer layer = (BlockLayer)layer_nodes[z];
             Rect2 chunk = new Rect2( chunkPos*chunk_size, chunk_size );
             layer.update_chunk(chunk, chunks[chunkPos], z);
@@ -114,7 +102,7 @@ public class BlockData : Node
         update_chunk(chunk_pos);
     }
 
-    public int get_block(int x, int y, int layer)
+    public int get_block(int x, int y, uint layer)
     {
         Vector2 chunk_pos = BlockPos2ChunkPos(x, y);
         if (!chunks.ContainsKey(chunk_pos)) return 0;
@@ -126,7 +114,7 @@ public class BlockData : Node
 
     private void init_chunk(Vector2 chunk_pos)
     {
-        chunks[chunk_pos] = new int[(int)chunk_size.x, (int)chunk_size.y, layers];
+        chunks[chunk_pos] = new int[(int)chunk_size.x, (int)chunk_size.y, layer_nodes.Count];
     }
 
     public void reset()

@@ -1,6 +1,7 @@
 tool
 extends Node2D
 
+signal finished_setup
 
 # List of required keys for each block's properties.
 const BLOCK_PROPERTIES := ["Name", "Solid", "LightFalloff", "Emit"]
@@ -19,7 +20,6 @@ variable's value.
 export var preview_camera: NodePath setget set_preview_cam
 var preview_cam: Camera2D
 
-
 # Script used for generating new chunks.
 export(Script) var generator_script: Script = generator_template setget set_gen_script
 
@@ -30,24 +30,12 @@ export var chunk_size := Vector2(16, 16) setget set_chunk_size
 # Additional chunks outside of camera.
 export var padding := Vector2(1, 1) setget set_padding
 
-### ---Light-- ###
-export var enable_lighting := true setget set_enable_lighting
-export var colored_lighting := true setget set_col_light
-export var smooth_lighting := true setget set_smooth_light
-export var lighting_layer := 0 setget set_lighting_layer
-export(Color, RGB) var ambient_light := Color.white
-
-### ---TileMap--- ###
-export var layers: Array = [TileSet.new()] setget set_layers
 # Array of dictionarys containg properties of each block.
 # Index 0 is reserved for air.
 export var block_properties: Array = [AIR_PROPERTIES] setget set_block_properties
 
-### ---Code and Shader Files--- ###
-var block_layer_script: Script = preload("res://addons/PixelDot/src/BlockLayer.cs")
+
 var block_data_script: Script = preload("res://addons/PixelDot/src/BlockData.cs")
-var lighting_script: Script = preload("res://addons/PixelDot/src/Lighting.cs")
-var lighting_shader: Shader = preload("res://addons/PixelDot/shaders/lighting.shader")
 var generator_template: Script = preload("res://addons/PixelDot/templates/GeneratorTemplate.gd")
 
 
@@ -56,36 +44,14 @@ var ready := false
 
 ## --Node Structure-- ##
 
-var layer_nodes := []
-var lighting_node: Sprite
 var data_node: Node
 var generator_node: Node
 
 func _setup():
-	for node in layer_nodes:
-		node.queue_free()
-	layer_nodes = []
-	if lighting_node:
-		lighting_node.queue_free()
 	if data_node:
 		data_node.queue_free()
 	if generator_node:
 		generator_node.queue_free()
-	
-	for layer in layers:
-		var node = TileMap.new()
-		node.tile_set = layer
-		node.cell_size = block_size
-		node.set_script(block_layer_script)
-		add_child(node)
-		layer_nodes.append(node)
-	
-	if enable_lighting:
-		lighting_node = Sprite.new()
-		lighting_node.set_script(lighting_script)
-		lighting_node.material = ShaderMaterial.new()
-		lighting_node.material.shader = lighting_shader
-		add_child(lighting_node)
 	
 	data_node = Node.new()
 	data_node.set_script(block_data_script)
@@ -94,15 +60,10 @@ func _setup():
 	generator_node = Node.new()
 	if generator_script:
 		generator_node.set_script(generator_script)
+
 	add_child(generator_node)
-
-
-## --Lighting-- ##
-
-func update_lighting():
-	var render_rect := get_render_rect()
 	
-	lighting_node._update_data(render_rect, block_size, lighting_layer, ambient_light)
+	emit_signal("finished_setup")
 
 
 ## --Data-- ##
@@ -126,24 +87,22 @@ func BlockPos2ChunkPos(x: int, y: int) -> Vector2:
 ## --Overrides-- ##
 
 func _ready():
+	_setup()
 	ready = true
+
 	preview_cam = get_node(preview_camera)
 	data_node.preview_cam = preview_cam
-
-func _process(_delta):
-	if enable_lighting:
-		lighting_node._update_data(get_render_rect(), block_size, lighting_layer, ambient_light)
 
 
 ## --Setters-- ##
 
 func set_preview_cam(new):
 	### Makes Sure NodePath is valid and points to Camera2D
-	if !ready:
-		preview_camera = new
-		return
-	
 	preview_camera = new
+
+	if not ready:  # Node must be ready to set its property.
+		yield(self, "ready")
+	
 	if !preview_camera:
 		return
 	
@@ -155,67 +114,30 @@ func set_preview_cam(new):
 		data_node.preview_cam = null
 		preview_camera = NodePath()
 
-func set_enable_lighting(new):
-	enable_lighting = new
-	if enable_lighting:
-		_setup()
-	else:
-		lighting_node.queue_free()
-
-func set_col_light(new):
-	colored_lighting = new
-	if not ready:  # Node must be ready to set its property.
-		yield(self, "ready")
-	lighting_node.COLORED = new
-
-func set_smooth_light(new):
-	smooth_lighting = new
-	if not ready:  # Node must be ready to set its property.
-		yield(self, "ready")
-	lighting_node.FILTER = new
-
 func set_block_size(new):
 	block_size = new
+
 	if not ready:  # Node must be ready to set its property.
 		yield(self, "ready")
-	data_node.set_block_size(new)
+	
+	data_node.block_size = block_size
 
 func set_chunk_size(new):
 	chunk_size = new
+
 	if not ready:  # Node must be ready to set its property.
 		yield(self, "ready")
-	data_node.set_chunk_size(new)
+	
+	data_node.chunk_size = chunk_size
+	data_node.reset()
 
 func set_padding(new):
 	padding = new
+
 	if not ready:  # Node must be ready to set its property.
 		yield(self, "ready")
-	data_node.set_padding(new)
-
-func set_lighting_layer(new):
-	### Enforces valid layer id
-	lighting_layer = new
-	if not ready: return
-	lighting_layer = clamp(lighting_layer, 0, layers.size()-1)
-
-func set_layers(new):
-	layers = new
 	
-	if layers.size() == 0:
-		layers.append(TileSet.new())
-		return
-	
-	var new_layers := []
-	var i := 0
-	for layer in layers:
-		if layer is TileSet:
-			new_layers.append(layer)
-		else:
-			new_layers.append(TileSet.new())
-	
-	layers = new_layers
-	_setup()  # Tilesets must be recreated.
-	data_node.set_layers(layers.size())
+	data_node.padding = padding
 
 func set_block_properties(new):
 	### Enforces Correct Formatting
@@ -247,13 +169,17 @@ func set_block_properties(new):
 		i += 1
 	
 	block_properties = new_block_prop
-	
-	if not ready:
-		return
-	lighting_node.BlockProp = block_properties
 
 func set_gen_script(new):
 	if new:
 		generator_script = new
 	else:
 		generator_script = generator_template
+	
+	if ready:
+		generator_node.set_script(generator_script)
+
+
+# Used other nodes to identify it.
+func BlockMap():
+	pass

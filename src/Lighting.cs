@@ -1,27 +1,30 @@
 using Godot;
 using Godot.Collections;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 [Tool]
 public class Lighting : Sprite
 {
-    Node2D parent;
-    Texture pixel = (Texture)GD.Load("res://addons/PixelDot/icons/pixel.png");
-
-    const float LIGHT_THRESHOLD = 0.05f;
     const float LIGHT_MULTIPLIER = 1.4f;
-    const int AMBIENT_END = 10;
-    const int AMBIENT_END_RANGE = 40;
 
-    public bool COLORED = true;
-    public bool FILTER = true;
+    [Export] public bool Colored = true;
+    [Export] public bool Smooth = true;
+    [Export] public uint lighting_layer = 0;
+    [Export(PropertyHint.ColorNoAlpha)] public Color ambient = new Color(1,1,1,1);
+    [Export] int Ambient_End = 10;
+    [Export] int Ambient_Falloff_Range = 40;
+    [Export(PropertyHint.Range, "0.01,0.99")] float Light_Threshold = 0.05f;
 
+    Node parent;
     public BlockData data_node;
+
+    Texture pixel = GD.Load<Texture>("res://addons/PixelDot/icons/pixel.png");
+    Shader shader = GD.Load<Shader>("res://addons/PixelDot/shaders/Lighting.shader");
 
     Array BlockProp;
     Rect2 render_rect;
-    int lighting_layer;
-    Color ambient;
 
     Vector3[,] light_values;
     float[,] light_falloff;
@@ -32,41 +35,72 @@ public class Lighting : Sprite
     Image img;
     ImageTexture tex;
 
-    Thread thread = new Thread();
-    Semaphore semaphore = new Semaphore();
+    System.Threading.Thread thread;
+    bool exit = false;
 
-    public override void _Ready()
+    bool invalid = false;
+
+    public async override void _Ready()
     {
-        parent = (Node2D)GetParent();
+        parent = GetParent();
+
+        if (!parent.HasMethod("BlockMap")){
+            GD.PushError("BlockLighting node ["+Name+"] is not a child of BlockLayer.");
+            invalid = true;
+            return;
+        }
+
+        Texture = pixel;
+        Material = new ShaderMaterial();
+        (Material as ShaderMaterial).Shader = shader;
+
+        await ToSignal(parent, "finished_setup");
+
+        data_node = (BlockData)parent.Get("data_node");
         Texture = pixel;
         Centered = false;
 
         BlockProp = (Array)parent.Get("block_properties");
 
-        thread.Start(this, "LightingThread", null, Thread.Priority.High);
+        update_data();
+        ThreadStart threadStart = new ThreadStart(LightingThread);
+        thread = new System.Threading.Thread(threadStart);
+        thread.Priority = ThreadPriority.Highest;
+        thread.Start();
     }
 
     public override void _Process(float delta)
     {
-        data_node = (BlockData)parent.Get("data_node");        
+        if (invalid){
+            parent = GetParent();
+            if (parent.HasMethod("BlockMap")){
+                invalid = false;
+                _Ready();
+            }else{
+                return;
+            }
+        }
+
+        update_data();
     }
 
-    public void _update_data(Rect2 RenderRect, Vector2 block_size, int LightingLayer, Color Ambient)
+    public override void _ExitTree()
     {
-        render_rect = RenderRect;
-        lighting_layer = LightingLayer;
-        ambient = Ambient;
-
-        Pos = render_rect.Position * block_size;
-        Size = render_rect.Size * block_size;
-
-        semaphore.Post();
+        exit = true;
+        thread.Join();
     }
 
-    void LightingThread(Object data)
+    public void update_data()
     {
-        semaphore.Wait();
-        while (true){
+        render_rect = data_node.get_render_rect();
+
+        Pos = render_rect.Position * data_node.block_size;
+        Size = render_rect.Size * data_node.block_size;
+    }
+
+    void LightingThread()
+    {
+        while (!exit){
             UpdateData();
         }
     }
@@ -91,13 +125,16 @@ public class Lighting : Sprite
 
         PopulateArrays(posx, posy, endx, endy, new Vector3(ambient.r, ambient.g, ambient.b)*LIGHT_MULTIPLIER);
 
-        for (int x = 0; x < sizex; x++)
-        for (int y = 0; y < sizey; y++){
-            if (light_values[x, y] > Vector3.Zero) ComputeLighting(x, y, sizex, sizey);
-        }
+        // for (int x = 0; x < sizex; x++)
+        Parallel.For(0, sizex, (x, state) =>
+        {
+            for (int y = 0; y < sizey; y++){
+                if (light_values[x, y] > Vector3.Zero) ComputeLighting(x, y, sizex, sizey);
+            }
+        });
 
         img = new Image();
-        img.Create(sizex, sizey, false, COLORED? Image.Format.Rgb8 : Image.Format.L8);
+        img.Create(sizex, sizey, false, Colored? Image.Format.Rgb8 : Image.Format.L8);
 
         img.Lock();
 
@@ -109,7 +146,7 @@ public class Lighting : Sprite
 
         img.Unlock();
         tex = new ImageTexture();
-        tex.CreateFromImage(img, (uint)((int)(FILTER ? 4 : 8)) );
+        tex.CreateFromImage(img, (uint)((int)(Smooth ? 4 : 8)) );
         (Material as ShaderMaterial).SetShaderParam("light_values", tex);
 
         Position = pos;
@@ -124,14 +161,14 @@ public class Lighting : Sprite
                 int i = x - posx;
                 int j = y - posy;
 
-                int blockID = (int)parent.Call("get_block", x, y, lighting_layer);
+                int blockID = data_node.get_block(x, y, lighting_layer);
                 bool solid = (bool)((Dictionary)BlockProp[blockID])["Solid"];
                 light_falloff[i, j] = (float)((Dictionary)BlockProp[blockID])["LightFalloff"];
                 
                 Color col = (Color)((Dictionary)BlockProp[blockID])["Emit"];
                 light_values[i, j] = new Vector3(col.r, col.g, col.b)*LIGHT_MULTIPLIER;
 
-                float ambient_factor = 1 - (float)(y-AMBIENT_END)/(float)AMBIENT_END_RANGE;
+                float ambient_factor = 1 - (float)(y-Ambient_End)/(float)Ambient_Falloff_Range;
                 ambient_factor = Mathf.Clamp(ambient_factor, 0, 1);
 
                 if (solid){
@@ -145,7 +182,7 @@ public class Lighting : Sprite
 
     void ComputeLighting(int curx, int cury, int sizex, int sizey)
     {
-        for (int c = 0; c < (COLORED ? 3 : 1); c++){
+        for (int c = 0; c < (Colored ? 3 : 1); c++){
 
             List<Vector2> Queue = new List<Vector2>(){new Vector2(curx, cury)};
 
@@ -171,7 +208,7 @@ public class Lighting : Sprite
                     if (x!=0 && y!=0) falloff = Mathf.Pow(falloff, 1.414f);
 
                     float targetLight = curLight * falloff;
-                    if (nextLight >= targetLight || targetLight < LIGHT_THRESHOLD) continue;
+                    if (nextLight >= targetLight || targetLight < Light_Threshold) continue;
 
                     light_values[newx, newy][c] = targetLight;
                     Queue.Add(new Vector2(newx, newy));
