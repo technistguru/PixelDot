@@ -28,7 +28,12 @@ public class BlockLayer : TileMap
             }
         }
     }
-    
+
+    public override void _ExitTree()
+    {
+        Clear();
+    }
+
 
     public void clear_chunk(Rect2 chunkRect)
     {

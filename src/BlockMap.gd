@@ -2,13 +2,14 @@ tool
 extends Node2D
 
 signal finished_setup
+signal generated_chunk(chunk_pos)
 
 # List of required keys for each block's properties.
-const BLOCK_PROPERTIES := ["Name", "Solid", "LightFalloff", "Emit"]
+const BLOCK_PROPERTIES := ["Name", "Solid", "LightAbsorb", "Emit", "EmitStrength"]
 # Default properties for new block.
-const TEMPLATE_PROPERTIES := {"Name" : "BlockName", "Solid" : true, "LightFalloff" : 0.7, "Emit" : Color()}
+const TEMPLATE_PROPERTIES := {"Name" : "BlockName", "Solid" : true, "LightAbsorb" : Color(0.7,0.7,0.7,1), "Emit" : Color(), "EmitStrength" : 1.4}
 # Default properteis for air.
-const AIR_PROPERTIES := {"Name" : "Air", "Solid" : false, "LightFalloff" : 0.85, "Emit" : Color()}
+const AIR_PROPERTIES := {"Name" : "Air", "Solid" : false, "LightAbsorb" : Color(0.85,0.85,0.85,1), "Emit" : Color(), "EmitStrength" : 1.4}
 
 
 """
@@ -169,6 +170,13 @@ func set_block_properties(new):
 		i += 1
 	
 	block_properties = new_block_prop
+	
+	if not ready:
+		return
+	
+	for child in get_children():
+		if child.has_method("ComputeLighting"):
+			child.BlockProp = block_properties
 
 func set_gen_script(new):
 	if new:
@@ -178,6 +186,11 @@ func set_gen_script(new):
 	
 	if ready:
 		generator_node.set_script(generator_script)
+
+
+### --Signals-- ###
+func generated_chunk(chunk_pos: Vector2):
+	emit_signal("generated_chunk", chunk_pos)
 
 
 # Used other nodes to identify it.

@@ -7,27 +7,26 @@ using System.Threading.Tasks;
 [Tool]
 public class Lighting : Sprite
 {
-    const float LIGHT_MULTIPLIER = 1.4f;
-
     [Export] public bool Colored = true;
     [Export] public bool Smooth = true;
     [Export] public uint lighting_layer = 0;
     [Export(PropertyHint.ColorNoAlpha)] public Color ambient = new Color(1,1,1,1);
+    [Export] float ambient_strength = 1.4f;
     [Export] int Ambient_End = 10;
     [Export] int Ambient_Falloff_Range = 40;
     [Export(PropertyHint.Range, "0.01,0.99")] float Light_Threshold = 0.05f;
 
+    Texture pixel = GD.Load<Texture>("res://addons/PixelDot/icons/pixel.png");
+    Shader shader = GD.Load<Shader>("res://addons/PixelDot/shaders/lighting.shader");
+
     Node parent;
     public BlockData data_node;
 
-    Texture pixel = GD.Load<Texture>("res://addons/PixelDot/icons/pixel.png");
-    Shader shader = GD.Load<Shader>("res://addons/PixelDot/shaders/Lighting.shader");
-
-    Array BlockProp;
+    public Array BlockProp;
     Rect2 render_rect;
 
     Vector3[,] light_values;
-    float[,] light_falloff;
+    Vector3[,] light_absorb;
 
     Vector2 Pos;
     Vector2 Size;
@@ -121,9 +120,9 @@ public class Lighting : Sprite
         int sizey = (int)render_rect.Size.y;
 
         light_values = new Vector3[sizex, sizey];
-        light_falloff = new float[sizex, sizey];
+        light_absorb = new Vector3[sizex, sizey];
 
-        PopulateArrays(posx, posy, endx, endy, new Vector3(ambient.r, ambient.g, ambient.b)*LIGHT_MULTIPLIER);
+        PopulateArrays(posx, posy, endx, endy, new Vector3(ambient.r, ambient.g, ambient.b)*ambient_strength);
 
         // for (int x = 0; x < sizex; x++)
         Parallel.For(0, sizex, (x, state) =>
@@ -163,10 +162,12 @@ public class Lighting : Sprite
 
                 int blockID = data_node.get_block(x, y, lighting_layer);
                 bool solid = (bool)((Dictionary)BlockProp[blockID])["Solid"];
-                light_falloff[i, j] = (float)((Dictionary)BlockProp[blockID])["LightFalloff"];
+                Color absorbCol = (Color)((Dictionary)BlockProp[blockID])["LightAbsorb"];
+                light_absorb[i, j] = new Vector3(absorbCol.r, absorbCol.g, absorbCol.b);
                 
                 Color col = (Color)((Dictionary)BlockProp[blockID])["Emit"];
-                light_values[i, j] = new Vector3(col.r, col.g, col.b)*LIGHT_MULTIPLIER;
+                float strength = (float)((Dictionary)BlockProp[blockID])["EmitStrength"];
+                light_values[i, j] = new Vector3(col.r, col.g, col.b)*strength;
 
                 float ambient_factor = 1 - (float)(y-Ambient_End)/(float)Ambient_Falloff_Range;
                 ambient_factor = Mathf.Clamp(ambient_factor, 0, 1);
@@ -204,7 +205,7 @@ public class Lighting : Sprite
                     float nextLight = light_values[newx, newy][c];
                     if (nextLight >= curLight) continue;
 
-                    float falloff = light_falloff[newx, newy];
+                    float falloff = light_absorb[newx, newy][c];
                     if (x!=0 && y!=0) falloff = Mathf.Pow(falloff, 1.414f);
 
                     float targetLight = curLight * falloff;

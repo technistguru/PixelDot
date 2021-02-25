@@ -72,6 +72,8 @@ public class BlockData : Node
                 chunks[chunkPos][x, y, z] = block;
             }
         }
+
+        GetParent().Call("generated_chunk", chunkPos);
     }
 
 
