@@ -48,6 +48,4 @@ public class BlockLayer : TileMap
             SetCell(x, y, chunkData[i, j, layer].Id-1 );
         }
     }
-
-    public void block_layer(){}
 }

@@ -34,6 +34,11 @@ public class Lighting : Sprite
     Node parent;
     public BlockData data_node;
 
+    Sprite padUp;
+    Sprite padRight;
+    Sprite padDown;
+    Sprite padLeft;
+
     public Array BlockProp;
     Rect2 render_rect;
 
@@ -60,6 +65,33 @@ public class Lighting : Sprite
             invalid = true;
             return;
         }
+
+
+        padUp = new Sprite();
+        padDown = new Sprite();
+        padRight = new Sprite();
+        padLeft = new Sprite();
+        AddChild(padUp);
+        AddChild(padRight);
+        AddChild(padDown);
+        AddChild(padLeft);
+        padUp.Texture = pixel;
+        padUp.Centered = false;
+        padRight.Texture = pixel;
+        padRight.Centered = false;
+        padDown.Texture = pixel;
+        padDown.Centered = false;
+        padLeft.Texture = pixel;
+        padLeft.Centered = false;
+        padUp.Position = new Vector2(-1, -1);
+        padUp.Scale = new Vector2(3, 1);
+        padRight.Position = new Vector2(-1, 0);
+        padRight.Scale = new Vector2(1, 1);
+        padDown.Position = new Vector2(-1, 1);
+        padDown.Scale = new Vector2(3, 1);
+        padLeft.Position = new Vector2(1, 0);
+        padLeft.Scale = new Vector2(1, 1);
+
 
         Texture = pixel;
         Material = new ShaderMaterial();
@@ -112,11 +144,11 @@ public class Lighting : Sprite
     void LightingThread()
     {
         while (!exit){
-            UpdateData();
+            Compute();
         }
     }
 
-    void UpdateData()
+    void Compute()
     {
         Vector2 pos = Pos;
         Vector2 size = Size;
@@ -167,12 +199,13 @@ public class Lighting : Sprite
     void PopulateArrays(int posx, int posy, int endx, int endy, Vector3 ambient)
     {
         for (int x = posx; x < endx; x++){
-            bool blocked = false;
+            Vector3 falloff = new Vector3(1, 1, 1);
             for (int y = posy; y < endy; y++){
                 int i = x - posx;
                 int j = y - posy;
-
+                
                 int blockID = GetBlock(x, y);
+
                 bool solid = (bool)((Dictionary)BlockProp[blockID])["Solid"];
                 Color absorbCol = (Color)((Dictionary)BlockProp[blockID])["LightAbsorb"];
                 light_absorb[i, j] = new Vector3(absorbCol.r, absorbCol.g, absorbCol.b);
@@ -184,13 +217,13 @@ public class Lighting : Sprite
                 float ambient_factor = 1 - (float)(y-Ambient_End)/(float)Ambient_Falloff_Range;
                 ambient_factor = Mathf.Clamp(ambient_factor, 0, 1);
 
-                if (solid){
-                    blocked = true;
-                }else if (!blocked)
-                    light_values[i, j] = ambient * ambient_factor;
+                if (solid)
+                    falloff *= light_absorb[i, j];
+
+                Vector3 a = ambient * ambient_factor * falloff;
+                light_values[i, j] = (light_values[i, j].LengthSquared() < 0.1) ? a : light_values[i,j];
             }
         }
-
     }
 
     void ComputeLighting(int curx, int cury, int sizex, int sizey)
@@ -233,12 +266,14 @@ public class Lighting : Sprite
 
     int GetBlock(int x, int y)
     {
-        int blockID = 0;
+        int blockId = 0;
         foreach (uint layer in lighting_layers){
-            blockID = data_node.get_block(x, y, layer);
-            if (blockID > 0) break;
+            Block block = data_node.get_blockb(x, y, layer);
+            if (block.liquid > 0.001 && block.liquid < 0.5) continue;
+            blockId = block.Id;
+            if (blockId > 0) break;
         }
 
-        return blockID;
+        return blockId;
     }
 }

@@ -26,8 +26,6 @@ public class BlockFluid : Node2D
     System.Threading.Thread thread;
     bool exit = false;
 
-    System.Threading.Timer timer;
-
     public async override void _Ready()
     {
         layer = GetParentOrNull<BlockLayer>();
@@ -55,7 +53,7 @@ public class BlockFluid : Node2D
             if (block.Id != BlockId) continue;
             Rect2 tile = new Rect2(new Vector2(x, y)*data_node.block_size, data_node.block_size);
             Color col = color;
-            col.a = Mathf.Max(block.liquid, col.a);
+            col.a = Mathf.Min(block.liquid, col.a);
             if (block.liquid > MaxValue)
             {
                 col = col.LinearInterpolate(color2, (block.liquid-MaxValue)/(MaxFlow-MaxValue));
