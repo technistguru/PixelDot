@@ -9,26 +9,56 @@ public class BlockData : Node
     public Vector2 chunk_size = new Vector2(16, 16);
     public Vector2 padding = new Vector2(1, 1);
 
-    List<BlockLayer> layer_nodes = new List<BlockLayer>();
+    public List<BlockLayer> layer_nodes = new List<BlockLayer>();
 
-    Dictionary<Vector2, int[,,]> chunks = new Dictionary<Vector2, int[,,]>();
+    Dictionary<Vector2, Block[,,]> chunks = new Dictionary<Vector2, Block[,,]>();
 
     List<Vector2> oldRenderChunks = new List<Vector2>();
 
+    Block AIR = new Block(0);
 
-    public override void _Process(float delta)
+    public override void _Ready()
     {
         layer_nodes.Clear();
+        uint i = 0;
         foreach (Node node in GetParent().GetChildren()){
             string name = node.Name;
             BlockLayer child = GetParent().GetNodeOrNull<BlockLayer>(name);
             if (child != null){
                 layer_nodes.Add(child);
+                child.Id = i;
             }
+            i++;
         }
 
-        List<Vector2> renderChunks = get_render_chunks();
+        update();
+    }
+
+
+    public override void _Process(float delta)
+    {
+        if (Engine.EditorHint)
+        {
+            layer_nodes.Clear();
+            uint i = 0;
+            foreach (Node node in GetParent().GetChildren()){
+                string name = node.Name;
+                BlockLayer child = GetParent().GetNodeOrNull<BlockLayer>(name);
+                if (child != null){
+                    layer_nodes.Add(child);
+                    child.Id = i;
+                }
+                i++;
+            }   
+        }
+
+        update();
+    }
+    
+    void update()
+    {
         Node generator = (Node)GetParent().Get("generator_node");
+        List<Vector2> renderChunks = get_render_chunks();
 
         foreach (Vector2 chunkPos in renderChunks){
 
@@ -69,7 +99,7 @@ public class BlockData : Node
 
                 int block = (int)generator.Call("_generate"+z.ToString(), i, j);
 
-                chunks[chunkPos][x, y, z] = block;
+                chunks[chunkPos][x, y, z] = new Block(block);
             }
         }
 
@@ -88,10 +118,35 @@ public class BlockData : Node
         }
     }
 
+    public void update_visible_chunks(int z)
+    {
+        List<Vector2> render_chunks = get_render_chunks();
+        foreach (Vector2 chunkPos in render_chunks)
+        {
+            BlockLayer layer = (BlockLayer)layer_nodes[z];
+            Rect2 chunk = new Rect2( chunkPos*chunk_size, chunk_size );
+            if (!chunks.ContainsKey(chunkPos)) continue;
+            layer.update_chunk(chunk, chunks[chunkPos], z);
+        }
+    }
+
 
     // --- Data ---
 
-    public void set_block(int x, int y, int layer, int value)
+    public void set_block(int x, int y, uint layer, int value)
+    {
+        Vector2 chunk_pos = BlockPos2ChunkPos(x, y);
+        if (!chunks.ContainsKey(chunk_pos))
+            init_chunk(chunk_pos);
+        
+        int posx = x - (int)(chunk_pos.x*chunk_size.x);
+        int posy = y - (int)(chunk_pos.y*chunk_size.y);
+        chunks[chunk_pos][posx, posy, layer] = new Block(value);
+
+        update_chunk(chunk_pos);
+    }
+
+    public void set_blockb(int x, int y, uint layer, Block value)
     {
         Vector2 chunk_pos = BlockPos2ChunkPos(x, y);
         if (!chunks.ContainsKey(chunk_pos))
@@ -100,8 +155,6 @@ public class BlockData : Node
         int posx = x - (int)(chunk_pos.x*chunk_size.x);
         int posy = y - (int)(chunk_pos.y*chunk_size.y);
         chunks[chunk_pos][posx, posy, layer] = value;
-
-        update_chunk(chunk_pos);
     }
 
     public int get_block(int x, int y, uint layer)
@@ -111,12 +164,22 @@ public class BlockData : Node
 
         int posx = x - (int)(chunk_pos.x*chunk_size.x);
         int posy = y - (int)(chunk_pos.y*chunk_size.y);
-        return chunks[chunk_pos][posx, posy, layer];
+        return chunks[chunk_pos][posx, posy, layer].Id;
+    }
+
+    public ref Block get_blockb(int x, int y, uint layer)
+    {
+        Vector2 chunk_pos = BlockPos2ChunkPos(x, y);
+        if (!chunks.ContainsKey(chunk_pos)) return ref AIR;
+
+        int posx = x - (int)(chunk_pos.x*chunk_size.x);
+        int posy = y - (int)(chunk_pos.y*chunk_size.y);
+        return ref chunks[chunk_pos][posx, posy, layer];
     }
 
     private void init_chunk(Vector2 chunk_pos)
     {
-        chunks[chunk_pos] = new int[(int)chunk_size.x, (int)chunk_size.y, layer_nodes.Count];
+        chunks[chunk_pos] = new Block[(int)chunk_size.x, (int)chunk_size.y, layer_nodes.Count];
     }
 
     public void reset()
@@ -189,5 +252,23 @@ public class BlockData : Node
     private Vector2 BlockPos2ChunkPos(int x, int y)
     {
         return new Vector2(Mathf.Floor((float)x/chunk_size.x), Mathf.Floor((float)y/chunk_size.y));
+    }
+}
+
+public struct Block
+{
+    public int Id;
+
+    // Fluid
+    public float liquid;
+    public bool settled;
+    public int settle_count;
+
+    public Block(int _id)
+    {
+        Id = _id;
+        liquid = 1f;
+        settled = false;
+        settle_count = 0;
     }
 }

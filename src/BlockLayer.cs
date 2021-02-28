@@ -4,6 +4,7 @@ using System;
 [Tool]
 public class BlockLayer : TileMap
 {
+    public uint Id = 0;
     bool invalid = false;
 
     public override void _Ready()
@@ -29,11 +30,6 @@ public class BlockLayer : TileMap
         }
     }
 
-    public override void _ExitTree()
-    {
-        Clear();
-    }
-
 
     public void clear_chunk(Rect2 chunkRect)
     {
@@ -43,13 +39,15 @@ public class BlockLayer : TileMap
         }
     }
 
-    public void update_chunk(Rect2 chunkRect, int[,,] chunkData, int layer)
+    public void update_chunk(Rect2 chunkRect, Block[,,] chunkData, int layer)
     {
         for (int x = (int)chunkRect.Position.x; x < chunkRect.End.x; x++)
         for (int y = (int)chunkRect.Position.y; y < chunkRect.End.y; y++){
             int i = x - (int)chunkRect.Position.x;
             int j = y - (int)chunkRect.Position.y;
-            SetCell(x, y, chunkData[i, j, layer]-1 );
+            SetCell(x, y, chunkData[i, j, layer].Id-1 );
         }
     }
+
+    public void block_layer(){}
 }

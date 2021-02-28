@@ -9,9 +9,21 @@ public class Lighting : Sprite
 {
     [Export] public bool Colored = true;
     [Export] public bool Smooth = true;
-    [Export] public uint lighting_layer = 0;
+
+    private int[] _lighting_layers = new int[]{0};
+    [Export] public int[] lighting_layers
+    {
+        get {return _lighting_layers;}
+        set
+        {
+            _lighting_layers = value;
+            System.Array.Sort(_lighting_layers);
+            System.Array.Reverse(_lighting_layers);
+        }
+    }
+
     [Export(PropertyHint.ColorNoAlpha)] public Color ambient = new Color(1,1,1,1);
-    [Export] float ambient_strength = 1.4f;
+    [Export(PropertyHint.Range, "0.1,1.99")] float ambient_strength = 1.4f;
     [Export] int Ambient_End = 10;
     [Export] int Ambient_Falloff_Range = 40;
     [Export(PropertyHint.Range, "0.01,0.99")] float Light_Threshold = 0.05f;
@@ -160,7 +172,7 @@ public class Lighting : Sprite
                 int i = x - posx;
                 int j = y - posy;
 
-                int blockID = data_node.get_block(x, y, lighting_layer);
+                int blockID = GetBlock(x, y);
                 bool solid = (bool)((Dictionary)BlockProp[blockID])["Solid"];
                 Color absorbCol = (Color)((Dictionary)BlockProp[blockID])["LightAbsorb"];
                 light_absorb[i, j] = new Vector3(absorbCol.r, absorbCol.g, absorbCol.b);
@@ -217,5 +229,16 @@ public class Lighting : Sprite
             }
 
         }
+    }
+
+    int GetBlock(int x, int y)
+    {
+        int blockID = 0;
+        foreach (uint layer in lighting_layers){
+            blockID = data_node.get_block(x, y, layer);
+            if (blockID > 0) break;
+        }
+
+        return blockID;
     }
 }

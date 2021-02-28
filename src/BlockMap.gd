@@ -54,15 +54,15 @@ func _setup():
 	if generator_node:
 		generator_node.queue_free()
 	
-	data_node = Node.new()
-	data_node.set_script(block_data_script)
-	add_child(data_node)
-	
 	generator_node = Node.new()
 	if generator_script:
 		generator_node.set_script(generator_script)
 
 	add_child(generator_node)
+	
+	data_node = Node.new()
+	data_node.set_script(block_data_script)
+	add_child(data_node)
 	
 	emit_signal("finished_setup")
 
