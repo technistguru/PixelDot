@@ -267,7 +267,7 @@ public struct Block
     public Block(int _id)
     {
         Id = _id;
-        liquid = 1f;
+        liquid = 0f;
         settled = false;
         settle_count = 0;
     }
