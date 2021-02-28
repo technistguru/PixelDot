@@ -31,7 +31,7 @@ export var chunk_size := Vector2(16, 16) setget set_chunk_size
 # Additional chunks outside of camera.
 export var padding := Vector2(1, 1) setget set_padding
 
-# Array of dictionarys containg properties of each block.
+# Array of dictionaries containing properties of each block.
 # Index 0 is reserved for air.
 export var block_properties: Array = [AIR_PROPERTIES] setget set_block_properties
 
