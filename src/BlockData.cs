@@ -103,6 +103,10 @@ public class BlockData : Node
             }
         }
 
+        if (generator.HasMethod("_finish_chunk")){
+            generator.Call("_finish_chunk", new Rect2(posx, posy, chunk_size.x, chunk_size.y));
+        }
+
         GetParent().Call("generated_chunk", chunkPos);
     }
 
@@ -137,7 +141,7 @@ public class BlockData : Node
     {
         Vector2 chunk_pos = BlockPos2ChunkPos(x, y);
         if (!chunks.ContainsKey(chunk_pos))
-            init_chunk(chunk_pos);
+            return;
         
         int posx = x - (int)(chunk_pos.x*chunk_size.x);
         int posy = y - (int)(chunk_pos.y*chunk_size.y);
